@@ -16,6 +16,8 @@ from auth.security import (
     create_access_token
 )
 
+from auth.dependencies import get_current_user
+
 
 router = APIRouter(
     prefix="/auth",
@@ -91,4 +93,16 @@ def login(
     return {
         "access_token": access_token,
         "token_type": "bearer"
+    }
+
+
+# -------------------------
+# LOGOUT
+# -------------------------
+@router.post("/logout")
+def logout(
+    current_user: User = Depends(get_current_user)
+):
+    return {
+        "message": "Logout successful"
     }
