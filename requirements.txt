@@ -1,3 +1,4 @@
+
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.14.2
@@ -30,3 +31,10 @@ typing-inspection==0.4.4
 typing_extensions==4.16.0
 tzdata==2026.3
 uvicorn==0.52.3
+fastmcp>=2.0.0
+qdrant-client>=1.9.0
+google-genai>=0.3.0
+pypdf>=4.2.0
+python-dotenv>=1.0.1
+tqdm>=4.66.0
+
