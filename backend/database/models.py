@@ -13,7 +13,11 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    documents = relationship("Document", back_populates="user")
+    documents = relationship(
+        "Document",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
 
 
 class Document(Base):
@@ -22,9 +26,14 @@ class Document(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
+    knowledge_base_doc_id = Column(String, nullable=False, index=True)
+
     filename = Column(String, nullable=False)
     file_type = Column(String, nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    user = relationship("User", back_populates="documents")
+    user = relationship(
+        "User",
+        back_populates="documents"
+    )

@@ -17,75 +17,226 @@ class Chunk:
 
 
 def split_into_paragraphs(text: str) -> list[str]:
-    # Normalize whitespace, then split on blank lines.
     text = text.replace("\r\n", "\n")
-    paras = re.split(r"\n\s*\n", text)
-    return [p.strip() for p in paras if p.strip()]
+
+    paragraphs = re.split(
+        r"\n\s*\n",
+        text,
+    )
+
+    return [
+        paragraph.strip()
+        for paragraph in paragraphs
+        if paragraph.strip()
+    ]
 
 
-def chunk_text(text: str, chunk_size_tokens: int, overlap_tokens: int) -> list[Chunk]:
+def split_into_sentences(text: str) -> list[str]:
+    """
+    Split text into sentences while keeping normal punctuation.
+    """
+
+    sentences = re.split(
+        r"(?<=[.!?])\s+",
+        text.strip(),
+    )
+
+    return [
+        sentence.strip()
+        for sentence in sentences
+        if sentence.strip()
+    ]
+
+
+def chunk_text(
+    text: str,
+    chunk_size_tokens: int,
+    overlap_tokens: int,
+) -> list[Chunk]:
+
     paragraphs = split_into_paragraphs(text)
+
     chunks: list[Chunk] = []
 
-    current_paras: list[str] = []
+    current_sentences: list[str] = []
     current_tokens = 0
+
     char_cursor = 0
     chunk_start_char = 0
 
-    def flush():
-        nonlocal current_paras, current_tokens, chunk_start_char
-        if not current_paras:
+    def flush() -> None:
+        nonlocal current_sentences
+        nonlocal current_tokens
+        nonlocal chunk_start_char
+
+        if not current_sentences:
             return
-        chunk_body = "\n\n".join(current_paras)
+
+        chunk_body = " ".join(
+            current_sentences
+        ).strip()
+
+        if not chunk_body:
+            return
+
         chunks.append(
             Chunk(
                 text=chunk_body,
                 chunk_index=len(chunks),
                 char_start=chunk_start_char,
-                char_end=chunk_start_char + len(chunk_body),
+                char_end=(
+                    chunk_start_char
+                    + len(chunk_body)
+                ),
             )
         )
 
-    for para in paragraphs:
-        para_tokens = _approx_tokens(para)
+        current_sentences = []
+        current_tokens = 0
 
-        # Single paragraph bigger than the whole chunk budget: hard-split it.
-        if para_tokens > chunk_size_tokens:
-            if current_paras:
-                flush()
-                current_paras, current_tokens = [], 0
-            words = para.split()
-            window_words = chunk_size_tokens * 4  # ~4 chars/token, ~1 token/word-ish
-            step = max(1, window_words - overlap_tokens * 4)
-            for i in range(0, len(words), step):
-                sub = " ".join(words[i : i + window_words])
-                if not sub:
-                    continue
+    for paragraph in paragraphs:
+
+        sentences = split_into_sentences(
+            paragraph
+        )
+
+        for sentence in sentences:
+
+            sentence_tokens = _approx_tokens(
+                sentence
+            )
+
+            # -------------------------------------------------
+            # If one sentence is larger than the chunk size,
+            # split that sentence by words.
+            # -------------------------------------------------
+
+            if sentence_tokens > chunk_size_tokens:
+
+                if current_sentences:
+                    flush()
+
+                words = sentence.split()
+
+                words_per_chunk = max(
+                    1,
+                    chunk_size_tokens * 4 // 5,
+                )
+
+                overlap_words = max(
+                    0,
+                    overlap_tokens * 4 // 5,
+                )
+
+                step = max(
+                    1,
+                    words_per_chunk - overlap_words,
+                )
+
+                for start in range(
+                    0,
+                    len(words),
+                    step,
+                ):
+
+                    sub_words = words[
+                        start:start + words_per_chunk
+                    ]
+
+                    if not sub_words:
+                        continue
+
+                    sub_text = " ".join(
+                        sub_words
+                    )
+
+                    chunks.append(
+                        Chunk(
+                            text=sub_text,
+                            chunk_index=len(chunks),
+                            char_start=char_cursor,
+                            char_end=(
+                                char_cursor
+                                + len(sub_text)
+                            ),
+                        )
+                    )
+
+                char_cursor += len(sentence) + 1
                 chunk_start_char = char_cursor
-                current_paras = [sub]
+
+                continue
+
+            # -------------------------------------------------
+            # Add sentence to current chunk if it fits.
+            # -------------------------------------------------
+
+            if (
+                current_sentences
+                and
+                current_tokens + sentence_tokens
+                > chunk_size_tokens
+            ):
+
                 flush()
-                current_paras, current_tokens = [], 0
-            char_cursor += len(para)
-            chunk_start_char = char_cursor
-            continue
 
-        if current_tokens + para_tokens > chunk_size_tokens and current_paras:
+                # Keep a small sentence overlap.
+                overlap_sentences: list[str] = []
+                overlap_count = 0
+
+                for previous in reversed(
+                    current_sentences
+                ):
+
+                    previous_tokens = (
+                        _approx_tokens(previous)
+                    )
+
+                    if (
+                        overlap_count
+                        + previous_tokens
+                        > overlap_tokens
+                    ):
+                        break
+
+                    overlap_sentences.insert(
+                        0,
+                        previous,
+                    )
+
+                    overlap_count += (
+                        previous_tokens
+                    )
+
+                current_sentences = (
+                    overlap_sentences
+                )
+
+                current_tokens = sum(
+                    _approx_tokens(sentence)
+                    for sentence
+                    in current_sentences
+                )
+
+            current_sentences.append(
+                sentence
+            )
+
+            current_tokens += sentence_tokens
+
+            char_cursor += len(sentence) + 1
+
+        # Finish each paragraph.
+        if current_sentences:
             flush()
-            # carry overlap forward: keep trailing paragraphs worth ~overlap_tokens
-            overlap_paras: list[str] = []
-            running = 0
-            for p in reversed(current_paras):
-                running += _approx_tokens(p)
-                overlap_paras.insert(0, p)
-                if running >= overlap_tokens:
-                    break
-            current_paras = overlap_paras
-            current_tokens = sum(_approx_tokens(p) for p in current_paras)
-            chunk_start_char = char_cursor - sum(len(p) for p in overlap_paras)
 
-        current_paras.append(para)
-        current_tokens += para_tokens
-        char_cursor += len(para) + 2  # account for the paragraph separator
+        char_cursor += 1
+        chunk_start_char = char_cursor
 
     flush()
-    return [c for c in chunks if c.text.strip()]
+
+    return [
+        chunk
+        for chunk in chunks
+        if chunk.text.strip()
+    ]
