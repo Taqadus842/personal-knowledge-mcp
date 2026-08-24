@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "knowledge-base-mcp": {
+      "command": "python",
+      "args": ["-m", "server.main"],
+      "cwd": "/path/to/knowledge-base-mcp",
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "QDRANT_HOST": "localhost",
+        "QDRANT_PORT": "6333",
+        "QDRANT_COLLECTION_NAME": "knowledge_base"
+      }
+    }
+  }
+}
